@@ -1,13 +1,9 @@
 blueprint:
-  name: "ZHA - Tuya TS004F Rotating Knob - Bürosteuerung"
+  name: "ZHA - Tuya TS004F Rotating Knob - Flexible Actions"
   description: >
-    Steuert das Büro mit dem Tuya TS004F Drehknopf. Durch Drehung können verschiedene Modi gewählt werden,
-    die durch eine RGB-Lampe signalisiert werden. Aktionen werden per Knopfdruck ausgelöst.
-
-    **Modi & Farben:**
-    - 🔴 **Rot (Pomodoro):** Startet/Stoppt den Pomodoro-Timer.
-    - 🟢 **Grün (Arbeitslicht):** Aktiviert tageszeitabhängige Beleuchtung.
-    - 🔵 **Blau (Spielen):** Setzt Licht für Spielemodus.
+    Steuerung verschiedener Aktionen mit dem Tuya TS004F Drehknopf.
+    Die Drehung wählt eine Aktion aus, die durch ein Indikatorlicht farblich signalisiert wird.
+    Die Aktion kann per Knopfdruck ausgeführt werden.
 
   domain: automation
 
@@ -20,42 +16,28 @@ blueprint:
           integration: zha
           model: TS004F
 
-    rgb_light:
-      name: RGB-Statusleuchte
+    indicator_light:
+      name: Indikator-Licht
       description: Die RGB-Leuchte, die den aktuellen Modus anzeigt.
       selector:
         entity:
           domain: light
 
-    ceiling_light:
-      name: Deckenleuchte
-      description: Die Hauptbeleuchtung des Raums.
+    actions:
+      name: Aktionen
+      description: Definiere Aktionen mit Farben und den dazugehörigen Befehlen.
       selector:
-        entity:
-          domain: light
-
-    led_strip:
-      name: LED-Streifen
-      description: Der LED-Streifen zur Anpassung der Lichtfarbe.
-      selector:
-        entity:
-          domain: light
-
-    pomodoro_timer:
-      name: Pomodoro Timer
-      description: Der Timer für den Pomodoro-Modus.
-      selector:
-        entity:
-          domain: timer
+        object:
 
 mode: restart
 max_exceeded: silent
 
 variables:
-  modes:
-    rot: [0, 100]    # Pomodoro
-    gruen: [120, 100]  # Arbeitslicht
-    blau: [240, 100]   # Spielen
+  action_list: !input actions
+  action_names: "{{ action_list.keys() }}"
+  action_colors: "{{ {key: action_list[key]['color'] for key in action_list} }}"
+  action_sequences: "{{ {key: action_list[key]['sequence'] for key in action_list} }}"
+  current_index: 0
 
 trigger:
   - platform: event
@@ -66,109 +48,48 @@ trigger:
 action:
   - variables:
       command: "{{ trigger.event.data.command }}"
-      current_color: "{{ state_attr(rgb_light, 'hs_color')[0] | default(0) }}"
 
   - choose:
-
-      ### Moduswechsel durch Drehen ###
+      ### Auswahl der nächsten Aktion durch Drehung ###
       - conditions:
           - "{{ command == 'left' or command == 'right' }}"
         sequence:
+          - variables:
+              current_index: >-
+                {% if command == 'right' %}
+                  {{ (current_index + 1) % action_names | length }}
+                {% else %}
+                  {{ (current_index - 1) % action_names | length }}
+                {% endif %}
+              selected_action: "{{ action_names[current_index] }}"
           - service: light.turn_on
             target:
-              entity_id: !input rgb_light
+              entity_id: !input indicator_light
             data:
-              hs_color: >
-                {% if command == 'left' %}
-                  [0, 100]  # Rot (Pomodoro)
-                {% elif command == 'right' %}
-                  [120, 100]  # Grün (Arbeitslicht)
-                {% else %}
-                  [240, 100]  # Blau (Spielen)
-                {% endif %}
-      
-      ### Modus: Pomodoro ###
-      - conditions:
-          - "{{ current_color == 0 }}"
-        sequence:
-          - choose:
-              - conditions: "{{ command == 'remote_button_short_press' }}"
-                sequence:
-                  - service: timer.start
-                    target:
-                      entity_id: !input pomodoro_timer
-              - conditions: "{{ command == 'remote_button_long_press' }}"
-                sequence:
-                  - service: timer.cancel
-                    target:
-                      entity_id: !input pomodoro_timer
-              - conditions: "{{ command == 'remote_button_double_press' }}"
-                sequence:
-                  - service: timer.finish
-                    target:
-                      entity_id: !input pomodoro_timer
+              hs_color: "{{ action_colors[selected_action] }}"
 
-      ### Modus: Arbeitslicht ###
+      ### Aktion ausführen durch kurzen Druck ###
       - conditions:
-          - "{{ current_color == 120 }}"
-        sequence:
-          - choose:
-              - conditions: "{{ command == 'remote_button_short_press' }}"
-                sequence:
-                  - service: light.turn_on
-                    target:
-                      entity_id: !input ceiling_light
-                    data:
-                      brightness: 255
-                      color_temp: 400
-                  - service: light.turn_on
-                    target:
-                      entity_id: !input led_strip
-                    data:
-                      hs_color: [210, 100]  # Blauweiß
-              - conditions: "{{ command == 'remote_button_long_press' }}"
-                sequence:
-                  - service: light.turn_off
-                    target:
-                      entity_id:
-                        - !input ceiling_light
-                        - !input led_strip
+          - "{{ command == 'remote_button_short_press' }}"
+        sequence: "{{ action_sequences[selected_action] }}"
 
-      ### Modus: Spielen ###
-      - conditions:
-          - "{{ current_color == 240 }}"
-        sequence:
-          - choose:
-              - conditions: "{{ command == 'remote_button_short_press' }}"
-                sequence:
-                  - service: light.turn_on
-                    target:
-                      entity_id: !input ceiling_light
-                    data:
-                      brightness: 26  # 10% Helligkeit
-                  - service: light.turn_on
-                    target:
-                      entity_id: !input led_strip
-                    data:
-                      hs_color: [240, 100]  # Blau
-              - conditions: "{{ command == 'remote_button_long_press' }}"
-                sequence:
-                  - service: light.turn_off
-                    target:
-                      entity_id:
-                        - !input ceiling_light
-                        - !input led_strip
-
-      ### Bestätigung der Moduswahl durch Doppelklick ###
+      ### Bestätigung durch Doppelklick (Blinkt 2x in der aktuellen Farbe) ###
       - conditions:
           - "{{ command == 'remote_button_double_press' }}"
         sequence:
           - service: light.turn_on
             target:
-              entity_id: !input rgb_light
+              entity_id: !input indicator_light
             data:
-              hs_color: [0, 100]  # Bestätigungsblinken in Rot
-          - delay: "00:00:02"
+              hs_color: "{{ action_colors[selected_action] }}"
+          - delay: "00:00:01"
           - service: light.turn_off
             target:
-              entity_id: !input rgb_light
+              entity_id: !input indicator_light
+          - delay: "00:00:50"
+          - service: light.turn_on
+            target:
+              entity_id: !input indicator_light
+            data:
+              hs_color: "{{ action_colors[selected_action] }}"
+
