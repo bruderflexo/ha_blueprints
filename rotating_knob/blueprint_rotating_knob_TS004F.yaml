@@ -153,7 +153,7 @@ action:
                 - service: light.turn_off
                   target:
                     entity_id: !input indicator_light
-                - delay: "00:00:0.3"
+                - delay: "00:00:0.5"
                 - service: light.turn_on
                   target:
                     entity_id: !input indicator_light
