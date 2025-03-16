@@ -1,9 +1,9 @@
 blueprint:
-  name: "ZHA - Tuya TS004F Rotating Knob - Flexible Actions"
+  name: "ZHA - Tuya TS004F Rotating Knob - 5 Mode Selector"
   description: >
-    Steuerung verschiedener Aktionen mit dem Tuya TS004F Drehknopf.
-    Die Drehung wählt eine Aktion aus, die durch ein Indikatorlicht farblich signalisiert wird.
-    Die Aktion kann per Knopfdruck ausgeführt werden.
+    Wählt einen von 5 Modi per Drehung des Tuya TS004F Knopfes aus.
+    Die aktuelle Auswahl wird durch ein RGB-Indikatorlicht angezeigt.
+    Ein kurzer Druck startet das zugehörige Skript.
 
   domain: automation
 
@@ -18,25 +18,57 @@ blueprint:
 
     indicator_light:
       name: Indikator-Licht
-      description: Die RGB-Leuchte, die den aktuellen Modus anzeigt.
+      description: RGB-Leuchte, die den aktuellen Modus anzeigt.
       selector:
         entity:
           domain: light
 
-    actions:
-      name: Aktionen
-      description: Definiere Aktionen mit Farben und den dazugehörigen Befehlen.
+    script_1:
+      name: Skript 1
+      description: Skript für Modus 1 (Rot)
       selector:
-        object:
+        entity:
+          domain: script
+
+    script_2:
+      name: Skript 2
+      description: Skript für Modus 2 (Grün)
+      selector:
+        entity:
+          domain: script
+
+    script_3:
+      name: Skript 3
+      description: Skript für Modus 3 (Blau)
+      selector:
+        entity:
+          domain: script
+
+    script_4:
+      name: Skript 4
+      description: Skript für Modus 4 (Gelb)
+      selector:
+        entity:
+          domain: script
+
+    script_5:
+      name: Skript 5
+      description: Skript für Modus 5 (Lila)
+      selector:
+        entity:
+          domain: script
 
 mode: restart
 max_exceeded: silent
 
 variables:
-  action_list: !input actions
-  action_names: "{{ action_list.keys() }}"
-  action_colors: "{{ {key: action_list[key]['color'] for key in action_list} }}"
-  action_sequences: "{{ {key: action_list[key]['sequence'] for key in action_list} }}"
+  modes:
+    0: { name: "Modus 1", color: [0, 100], script: !input script_1 }      # Rot
+    1: { name: "Modus 2", color: [120, 100], script: !input script_2 }    # Grün
+    2: { name: "Modus 3", color: [240, 100], script: !input script_3 }    # Blau
+    3: { name: "Modus 4", color: [50, 100], script: !input script_4 }     # Gelb
+    4: { name: "Modus 5", color: [280, 100], script: !input script_5 }    # Lila
+
   current_index: 0
 
 trigger:
@@ -50,38 +82,36 @@ action:
       command: "{{ trigger.event.data.command }}"
 
   - choose:
-      ### Auswahl der nächsten Aktion durch Drehung ###
+      ### Drehung: Modus wechseln ###
       - conditions:
           - "{{ command == 'left' or command == 'right' }}"
         sequence:
           - variables:
               current_index: >-
                 {% if command == 'right' %}
-                  {{ (current_index + 1) % action_names | length }}
+                  {{ (current_index + 1) % 5 }}
                 {% else %}
-                  {{ (current_index - 1) % action_names | length }}
+                  {{ (current_index - 1) % 5 }}
                 {% endif %}
-              selected_action: "{{ action_names[current_index] }}"
+              selected_mode: "{{ modes[current_index] }}"
           - service: light.turn_on
             target:
               entity_id: !input indicator_light
             data:
-              hs_color: "{{ action_colors[selected_action] }}"
+              hs_color: "{{ selected_mode.color }}"
 
-      ### Aktion ausführen durch kurzen Druck ###
+      ### Kurzer Druck: Skript starten ###
       - conditions:
           - "{{ command == 'remote_button_short_press' }}"
-        sequence: "{{ action_sequences[selected_action] }}"
-
-      ### Bestätigung durch Doppelklick (Blinkt 2x in der aktuellen Farbe) ###
-      - conditions:
-          - "{{ command == 'remote_button_double_press' }}"
         sequence:
+          - service: script.turn_on
+            target:
+              entity_id: "{{ selected_mode.script }}"
           - service: light.turn_on
             target:
               entity_id: !input indicator_light
             data:
-              hs_color: "{{ action_colors[selected_action] }}"
+              hs_color: "{{ selected_mode.color }}"
           - delay: "00:00:01"
           - service: light.turn_off
             target:
@@ -91,5 +121,4 @@ action:
             target:
               entity_id: !input indicator_light
             data:
-              hs_color: "{{ action_colors[selected_action] }}"
-
+              hs_color: "{{ selected_mode.color }}"
