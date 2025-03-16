@@ -3,13 +3,14 @@ blueprint:
   description: >
     Steuert das Büro mit dem Tuya TS004F Drehknopf. Durch Drehung können verschiedene Modi gewählt werden,
     die durch eine RGB-Lampe signalisiert werden. Aktionen werden per Knopfdruck ausgelöst.
-    
+
     **Modi & Farben:**
     - 🔴 **Rot (Pomodoro):** Startet/Stoppt den Pomodoro-Timer.
     - 🟢 **Grün (Arbeitslicht):** Aktiviert tageszeitabhängige Beleuchtung.
     - 🔵 **Blau (Spielen):** Setzt Licht für Spielemodus.
-    
+
   domain: automation
+
   input:
     remote:
       name: Tuya TS004F Rotating Knob
@@ -18,24 +19,28 @@ blueprint:
         device:
           integration: zha
           model: TS004F
+
     rgb_light:
       name: RGB-Statusleuchte
       description: Die RGB-Leuchte, die den aktuellen Modus anzeigt.
       selector:
         entity:
           domain: light
+
     ceiling_light:
       name: Deckenleuchte
       description: Die Hauptbeleuchtung des Raums.
       selector:
         entity:
           domain: light
+
     led_strip:
       name: LED-Streifen
       description: Der LED-Streifen zur Anpassung der Lichtfarbe.
       selector:
         entity:
           domain: light
+
     pomodoro_timer:
       name: Pomodoro Timer
       description: Der Timer für den Pomodoro-Modus.
@@ -44,7 +49,7 @@ blueprint:
           domain: timer
 
 mode: restart
-max: 10
+max_exceeded: silent
 
 variables:
   modes:
@@ -61,10 +66,6 @@ trigger:
 action:
   - variables:
       command: "{{ trigger.event.data.command }}"
-      rgb_light: !input rgb_light
-      ceiling_light: !input ceiling_light
-      led_strip: !input led_strip
-      pomodoro_timer: !input pomodoro_timer
       current_color: "{{ state_attr(rgb_light, 'hs_color')[0] | default(0) }}"
 
   - choose:
