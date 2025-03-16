@@ -1,6 +1,57 @@
-alias: "Steuere Büro mit Tuya TS004F Rotating Knob"
+blueprint:
+  name: "ZHA - Tuya TS004F Rotating Knob - Bürosteuerung"
+  description: >
+    Steuert das Büro mit dem Tuya TS004F Drehknopf. Durch Drehung können verschiedene Modi gewählt werden,
+    die durch eine RGB-Lampe signalisiert werden. Aktionen werden per Knopfdruck ausgelöst.
+    
+    **Modi & Farben:**
+    - 🔴 **Rot (Pomodoro):** Startet/Stoppt den Pomodoro-Timer.
+    - 🟢 **Grün (Arbeitslicht):** Aktiviert tageszeitabhängige Beleuchtung.
+    - 🔵 **Blau (Spielen):** Setzt Licht für Spielemodus.
+    
+  domain: automation
+  input:
+    remote:
+      name: Tuya TS004F Rotating Knob
+      description: Wähle den Drehknopf.
+      selector:
+        device:
+          integration: zha
+          model: TS004F
+    rgb_light:
+      name: RGB-Statusleuchte
+      description: Die RGB-Leuchte, die den aktuellen Modus anzeigt.
+      selector:
+        entity:
+          domain: light
+    ceiling_light:
+      name: Deckenleuchte
+      description: Die Hauptbeleuchtung des Raums.
+      selector:
+        entity:
+          domain: light
+    led_strip:
+      name: LED-Streifen
+      description: Der LED-Streifen zur Anpassung der Lichtfarbe.
+      selector:
+        entity:
+          domain: light
+    pomodoro_timer:
+      name: Pomodoro Timer
+      description: Der Timer für den Pomodoro-Modus.
+      selector:
+        entity:
+          domain: timer
+
 mode: restart
 max: 10
+
+variables:
+  modes:
+    rot: [0, 100]    # Pomodoro
+    gruen: [120, 100]  # Arbeitslicht
+    blau: [240, 100]   # Spielen
+
 trigger:
   - platform: event
     event_type: zha_event
@@ -9,132 +60,114 @@ trigger:
 
 action:
   - variables:
-      light: !input light
-      rgb_light: light.rgb_buero
       command: "{{ trigger.event.data.command }}"
-      cluster_id: "{{ trigger.event.data.cluster_id }}"
-      endpoint_id: "{{ trigger.event.data.endpoint_id }}"
-      args: "{{ trigger.event.data.args }}"
-      direction: "{% if trigger.event.data.args[0] == 0 %} 0 {% elif trigger.event.data.args[0] == 1 %} 1 {% elif trigger.event.data.args[0] == 3 %} 3 {% endif %}"
-      value: "{% if trigger.event.data.args[1] %} {{ trigger.event.data.args[1] / 2 }} {% endif %}"
-      speed: "{% if trigger.event.data.args[2] == 1 %} 0.5 {% else %} 0 {% endif %}"
-      current_color: "{{ state_attr(rgb_light, 'hs_color')[0] }}"
+      rgb_light: !input rgb_light
+      ceiling_light: !input ceiling_light
+      led_strip: !input led_strip
+      pomodoro_timer: !input pomodoro_timer
+      current_color: "{{ state_attr(rgb_light, 'hs_color')[0] | default(0) }}"
 
   - choose:
 
-    # **Rot: Pomodoro-Modus**
-    - conditions:
-        - "{{ current_color == 0 }}"
-      sequence:
-        - choose:
-            # Kurzer Druck: Pomodoro Timer starten
-            - conditions:
-                - "{{ command == 'remote_button_short_press' }}"
-              sequence:
-                - service: timer.start
-                  target:
-                    entity_id: timer.pomodoro
-            # Langer Druck: Pomodoro Timer stoppen
-            - conditions:
-                - "{{ command == 'remote_button_long_press' }}"
-              sequence:
-                - service: timer.cancel
-                  target:
-                    entity_id: timer.pomodoro
-            # Doppelklick: Pomodoro Timer zurücksetzen
-            - conditions:
-                - "{{ command == 'remote_button_double_press' }}"
-              sequence:
-                - service: timer.finish
-                  target:
-                    entity_id: timer.pomodoro
+      ### Moduswechsel durch Drehen ###
+      - conditions:
+          - "{{ command == 'left' or command == 'right' }}"
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: !input rgb_light
+            data:
+              hs_color: >
+                {% if command == 'left' %}
+                  [0, 100]  # Rot (Pomodoro)
+                {% elif command == 'right' %}
+                  [120, 100]  # Grün (Arbeitslicht)
+                {% else %}
+                  [240, 100]  # Blau (Spielen)
+                {% endif %}
+      
+      ### Modus: Pomodoro ###
+      - conditions:
+          - "{{ current_color == 0 }}"
+        sequence:
+          - choose:
+              - conditions: "{{ command == 'remote_button_short_press' }}"
+                sequence:
+                  - service: timer.start
+                    target:
+                      entity_id: !input pomodoro_timer
+              - conditions: "{{ command == 'remote_button_long_press' }}"
+                sequence:
+                  - service: timer.cancel
+                    target:
+                      entity_id: !input pomodoro_timer
+              - conditions: "{{ command == 'remote_button_double_press' }}"
+                sequence:
+                  - service: timer.finish
+                    target:
+                      entity_id: !input pomodoro_timer
 
-    # **Grün: Arbeitslicht**
-    - conditions:
-        - "{{ current_color == 120 }}"
-      sequence:
-        - choose:
-            # Kurzer Druck: Arbeitslicht (Deckenleuchte) an, LED Licht blauweiß
-            - conditions:
-                - "{{ command == 'remote_button_short_press' }}"
-              sequence:
-                - service: light.turn_on
-                  target:
-                    entity_id: light.deckenleuchte
-                  data_template:
-                    brightness: 255
-                    color_temp: 400  # Weißes Licht (Tageslicht)
-                - service: light.turn_on
-                  target:
-                    entity_id: light.led_streifen
-                  data_template:
-                    hs_color: [210, 100]  # Blauweiß
-            # Langer Druck: Alle Lichter ausschalten
-            - conditions:
-                - "{{ command == 'remote_button_long_press' }}"
-              sequence:
-                - service: light.turn_off
-                  target:
-                    entity_id:
-                      - light.deckenleuchte
-                      - light.led_streifen
+      ### Modus: Arbeitslicht ###
+      - conditions:
+          - "{{ current_color == 120 }}"
+        sequence:
+          - choose:
+              - conditions: "{{ command == 'remote_button_short_press' }}"
+                sequence:
+                  - service: light.turn_on
+                    target:
+                      entity_id: !input ceiling_light
+                    data:
+                      brightness: 255
+                      color_temp: 400
+                  - service: light.turn_on
+                    target:
+                      entity_id: !input led_strip
+                    data:
+                      hs_color: [210, 100]  # Blauweiß
+              - conditions: "{{ command == 'remote_button_long_press' }}"
+                sequence:
+                  - service: light.turn_off
+                    target:
+                      entity_id:
+                        - !input ceiling_light
+                        - !input led_strip
 
-    # **Blau: Spielen-Modus**
-    - conditions:
-        - "{{ current_color == 240 }}"
-      sequence:
-        - choose:
-            # Kurzer Druck: Deckenleuchte auf 10% und LED-Licht blau
-            - conditions:
-                - "{{ command == 'remote_button_short_press' }}"
-              sequence:
-                - service: light.turn_on
-                  target:
-                    entity_id: light.deckenleuchte
-                  data_template:
-                    brightness: 26  # 10% der Helligkeit
-                - service: light.turn_on
-                  target:
-                    entity_id: light.led_streifen
-                  data_template:
-                    hs_color: [240, 100]  # Blau
-            # Langer Druck: Alle Lichter ausschalten
-            - conditions:
-                - "{{ command == 'remote_button_long_press' }}"
-              sequence:
-                - service: light.turn_off
-                  target:
-                    entity_id:
-                      - light.deckenleuchte
-                      - light.led_streifen
+      ### Modus: Spielen ###
+      - conditions:
+          - "{{ current_color == 240 }}"
+        sequence:
+          - choose:
+              - conditions: "{{ command == 'remote_button_short_press' }}"
+                sequence:
+                  - service: light.turn_on
+                    target:
+                      entity_id: !input ceiling_light
+                    data:
+                      brightness: 26  # 10% Helligkeit
+                  - service: light.turn_on
+                    target:
+                      entity_id: !input led_strip
+                    data:
+                      hs_color: [240, 100]  # Blau
+              - conditions: "{{ command == 'remote_button_long_press' }}"
+                sequence:
+                  - service: light.turn_off
+                    target:
+                      entity_id:
+                        - !input ceiling_light
+                        - !input led_strip
 
-    # **Moduswechsel durch Drehen**
-    - conditions:
-        - "{{ command == 'left' or command == 'right' }}"
-      sequence:
-        - service: light.turn_on
-          target:
-            entity_id: light.rgb_buero
-          data_template:
-            hs_color: >
-              {% if command == 'left' %}
-                [0, 100]  # Rot (Pomodoro)
-              {% elif command == 'right' %}
-                [120, 100]  # Grün (Arbeitslicht)
-              {% else %}
-                [240, 100]  # Blau (Spielen)
-              {% endif %}
-
-    # Bestätigung der Moduswahl durch Doppelklick
-    - conditions:
-        - "{{ command == 'remote_button_double_press' }}"
-      sequence:
-        - service: light.turn_on
-          target:
-            entity_id: light.rgb_buero
-          data_template:
-            hs_color: [0, 100]  # Bestätigungsblinken in Rot
-        - delay: "00:00:02"
-        - service: light.turn_off
-          target:
-            entity_id: light.rgb_buero
+      ### Bestätigung der Moduswahl durch Doppelklick ###
+      - conditions:
+          - "{{ command == 'remote_button_double_press' }}"
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: !input rgb_light
+            data:
+              hs_color: [0, 100]  # Bestätigungsblinken in Rot
+          - delay: "00:00:02"
+          - service: light.turn_off
+            target:
+              entity_id: !input rgb_light
