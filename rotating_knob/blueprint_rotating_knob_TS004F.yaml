@@ -23,6 +23,13 @@ blueprint:
         entity:
           domain: light
 
+    mode_helper:
+      name: Modus-Speicher (Helper)
+      description: Wähle einen `input_number`, um den aktuellen Modus zu speichern.
+      selector:
+        entity:
+          domain: input_number
+
     script_1:
       name: Skript 1
       description: Skript für Modus 1 (Rot)
@@ -63,13 +70,11 @@ max_exceeded: silent
 
 variables:
   modes:
-    0: { name: "Modus 1", color: [0, 100], script: !input script_1 }      # Rot
-    1: { name: "Modus 2", color: [120, 100], script: !input script_2 }    # Grün
-    2: { name: "Modus 3", color: [240, 100], script: !input script_3 }    # Blau
-    3: { name: "Modus 4", color: [50, 100], script: !input script_4 }     # Gelb
-    4: { name: "Modus 5", color: [280, 100], script: !input script_5 }    # Lila
-
-  current_index: 0
+    0: { name: "Modus 1", color: [0, 100] }      # Rot
+    1: { name: "Modus 2", color: [120, 100] }    # Grün
+    2: { name: "Modus 3", color: [240, 100] }    # Blau
+    3: { name: "Modus 4", color: [50, 100] }     # Gelb
+    4: { name: "Modus 5", color: [280, 100] }    # Lila
 
 trigger:
   - platform: event
@@ -80,6 +85,7 @@ trigger:
 action:
   - variables:
       command: "{{ trigger.event.data.command }}"
+      current_index: "{{ states(mode_helper) | int }}"
 
   - choose:
       ### Drehung: Modus wechseln ###
@@ -87,38 +93,51 @@ action:
           - "{{ command == 'left' or command == 'right' }}"
         sequence:
           - variables:
-              current_index: >-
+              new_index: >-
                 {% if command == 'right' %}
                   {{ (current_index + 1) % 5 }}
                 {% else %}
                   {{ (current_index - 1) % 5 }}
                 {% endif %}
-              selected_mode: "{{ modes[current_index] }}"
+          - service: input_number.set_value
+            target:
+              entity_id: !input mode_helper
+            data:
+              value: "{{ new_index }}"
           - service: light.turn_on
             target:
               entity_id: !input indicator_light
             data:
-              hs_color: "{{ selected_mode.color }}"
+              hs_color: "{{ modes[new_index].color }}"
+              brightness: 255
 
       ### Kurzer Druck: Skript starten ###
       - conditions:
           - "{{ command == 'remote_button_short_press' }}"
         sequence:
-          - service: script.turn_on
-            target:
-              entity_id: "{{ selected_mode.script }}"
-          - service: light.turn_on
-            target:
-              entity_id: !input indicator_light
-            data:
-              hs_color: "{{ selected_mode.color }}"
-          - delay: "00:00:01"
-          - service: light.turn_off
-            target:
-              entity_id: !input indicator_light
-          - delay: "00:00:50"
-          - service: light.turn_on
-            target:
-              entity_id: !input indicator_light
-            data:
-              hs_color: "{{ selected_mode.color }}"
+          - choose:
+              - conditions: "{{ current_index == 0 }}"
+                sequence: !input script_1
+              - conditions: "{{ current_index == 1 }}"
+                sequence: !input script_2
+              - conditions: "{{ current_index == 2 }}"
+                sequence: !input script_3
+              - conditions: "{{ current_index == 3 }}"
+                sequence: !input script_4
+              - conditions: "{{ current_index == 4 }}"
+                sequence: !input script_5
+          # Bestätigung durch Blinken
+          - repeat:
+              count: 2
+              sequence:
+                - service: light.turn_off
+                  target:
+                    entity_id: !input indicator_light
+                - delay: "00:00:0.3"
+                - service: light.turn_on
+                  target:
+                    entity_id: !input indicator_light
+                  data:
+                    hs_color: "{{ modes[current_index].color }}"
+                    brightness: 255
+                - delay: "00:00:0.3"
