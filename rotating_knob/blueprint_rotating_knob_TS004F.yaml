@@ -25,7 +25,7 @@ blueprint:
 
     mode_helper:
       name: Modus-Speicher (Helper)
-      description: `input_number` zur Speicherung des aktuellen Modus.
+      description: input_number zur Speicherung des aktuellen Modus.
       selector:
         entity:
           domain: input_number
