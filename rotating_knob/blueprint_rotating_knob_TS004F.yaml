@@ -161,3 +161,7 @@ action:
                     hs_color: "{{ modes[current_index].color }}"
                     brightness: 255
                 - delay: "00:00:0.3"
+          - delay: "00:00:10"
+          - service: light.turn_off
+            target:
+              entity_id: !input indicator_light           
