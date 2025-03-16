@@ -27,36 +27,36 @@ blueprint:
       name: Skript 1
       description: Skript für Modus 1 (Rot)
       selector:
-        entity:
-          domain: script
+        action:
+      default: []
 
     script_2:
       name: Skript 2
       description: Skript für Modus 2 (Grün)
       selector:
-        entity:
-          domain: script
+        action:
+      default: []
 
     script_3:
       name: Skript 3
       description: Skript für Modus 3 (Blau)
       selector:
-        entity:
-          domain: script
+        action:
+      default: []
 
     script_4:
       name: Skript 4
       description: Skript für Modus 4 (Gelb)
       selector:
-        entity:
-          domain: script
+        action:
+      default: []
 
     script_5:
       name: Skript 5
       description: Skript für Modus 5 (Lila)
       selector:
-        entity:
-          domain: script
+        action:
+      default: []
 
 mode: restart
 max_exceeded: silent
