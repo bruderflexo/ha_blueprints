@@ -25,7 +25,7 @@ blueprint:
 
     mode_helper:
       name: Modus-Speicher (Helper)
-      description: Wähle einen `input_number`, um den aktuellen Modus zu speichern.
+      description: `input_number` zur Speicherung des aktuellen Modus.
       selector:
         entity:
           domain: input_number
@@ -85,6 +85,7 @@ trigger:
 action:
   - variables:
       command: "{{ trigger.event.data.command }}"
+      mode_helper_entity: !input mode_helper
 
   - choose:
       ### Drehung: Modus wechseln ###
@@ -92,7 +93,7 @@ action:
           - "{{ command == 'left' or command == 'right' }}"
         sequence:
           - variables:
-              current_index: "{{ states(mode_helper) | int(default=0) }}"
+              current_index: "{{ states(mode_helper_entity) | int(default=0) }}"
               new_index: >-
                 {% if command == 'right' %}
                   {{ (current_index + 1) % 5 }}
@@ -101,7 +102,7 @@ action:
                 {% endif %}
           - service: input_number.set_value
             target:
-              entity_id: !input mode_helper
+              entity_id: "{{ mode_helper_entity }}"
             data:
               value: "{{ new_index }}"
           - service: light.turn_on
@@ -116,7 +117,7 @@ action:
           - "{{ command == 'remote_button_short_press' }}"
         sequence:
           - variables:
-              current_index: "{{ states(mode_helper) | int(default=0) }}"
+              current_index: "{{ states(mode_helper_entity) | int(default=0) }}"
           - choose:
               - conditions: "{{ current_index == 0 }}"
                 sequence: !input script_1
