@@ -131,7 +131,9 @@ action:
 
       ### Kurzer Druck: Skript starten ###
       - conditions:
-          - "{{ command == 'remote_button_short_press' }}"
+          - '{{ command == "toggle" }}'
+          - '{{ cluster_id == 6 }}'
+          - '{{ endpoint_id == 1 }}'
         sequence:
           - choose:
               - conditions: "{{ current_index == 0 }}"
